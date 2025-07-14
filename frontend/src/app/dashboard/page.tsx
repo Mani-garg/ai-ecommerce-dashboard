@@ -33,7 +33,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     // Fetch AI Insights
-    fetch('http://localhost:5000/api/ai/insights')
+    fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/ai/insights`)
       .then((res) => res.json())
       .then((data) => {
         setInsights(data.insights || 'No insights available.');
@@ -45,7 +45,7 @@ export default function DashboardPage() {
       });
 
     // Fetch metrics
-    fetch('http://localhost:5000/api/metrics/summary')
+    fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/metrics/summary`)
       .then((res) => res.json())
       .then((data) => setMetrics(data))
       .catch(() => setMetrics({ revenue: 'Error', orders: 'Error', users: 'Error' }));
