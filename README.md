@@ -64,6 +64,12 @@ DB_NAME=insightify
 OPENAI_API_KEY=your_openai_api_key
 ```
 
+Create `.env.local` inside `frontend/`:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+```
+
 ### 4. Start the Backend
 
 ```bash
