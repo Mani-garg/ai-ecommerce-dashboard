@@ -1,74 +1,111 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import StatsCard from '@/components/ui/StatsCard';
 import AIInsightCard from '@/components/ui/AIInsightCard';
 import { Globe, Sparkle, TrendingUp } from 'lucide-react';
+import { fetchJson } from '@/lib/api';
 
 // Dynamically import charts and table to prevent SSR hydration issues
 const SalesTrendChart = dynamic(() => import('@/components/ui/SalesTrendChart'), { ssr: false });
 const ProductTable = dynamic(() => import('@/components/ui/ProductTable'), { ssr: false });
 const CountryBarChart = dynamic(() => import('@/components/ui/CountryBarChart'), { ssr: false });
 
+type Metrics = {
+  revenue: string;
+  orders: string;
+  users: string;
+};
+
+type SaleRow = {
+  id: string;
+  product: string;
+  customer: string;
+  amount: string;
+  date: string;
+};
+
+type TrendDataPoint = {
+  date: string;
+  sales: number;
+  returns: number;
+  profit: number;
+};
+
+const INITIAL_METRICS: Metrics = {
+  revenue: 'Loading...',
+  orders: 'Loading...',
+  users: 'Loading...',
+};
+
+const FALLBACK_SALES_DATA: SaleRow[] = [
+  { id: '#1234', product: 'Apple Watch', customer: 'Anjali K.', amount: '₹12000', date: '10 Jul 25' },
+  { id: '#1235', product: 'Galaxy Buds', customer: 'Rohan M.', amount: '₹5000', date: '10 Jul 25' },
+  { id: '#1236', product: 'MacBook Air', customer: 'Neha P.', amount: '₹90000', date: '09 Jul 25' },
+  { id: '#1237', product: 'iPad Mini', customer: 'Amit S.', amount: '₹38000', date: '08 Jul 25' },
+  { id: '#1238', product: 'Pixel 7', customer: 'Divya V.', amount: '₹52000', date: '07 Jul 25' },
+  { id: '#1239', product: 'AirPods Pro', customer: 'Karan L.', amount: '₹18000', date: '06 Jul 25' },
+];
+
 export default function DashboardPage() {
   const [insights, setInsights] = useState('');
   const [loadingInsights, setLoadingInsights] = useState(true);
-  const [metrics, setMetrics] = useState({
-    revenue: 'Loading...',
-    orders: 'Loading...',
-    users: 'Loading...',
-  });
-
-  const [salesData, setSalesData] = useState([
-    { id: '#1234', product: 'Apple Watch', customer: 'Anjali K.', amount: '₹12000', date: '10 Jul 25' },
-    { id: '#1235', product: 'Galaxy Buds', customer: 'Rohan M.', amount: '₹5000', date: '10 Jul 25' },
-    { id: '#1236', product: 'MacBook Air', customer: 'Neha P.', amount: '₹90000', date: '09 Jul 25' },
-    { id: '#1237', product: 'iPad Mini', customer: 'Amit S.', amount: '₹38000', date: '08 Jul 25' },
-    { id: '#1238', product: 'Pixel 7', customer: 'Divya V.', amount: '₹52000', date: '07 Jul 25' },
-    { id: '#1239', product: 'AirPods Pro', customer: 'Karan L.', amount: '₹18000', date: '06 Jul 25' },
-  ]);
-
-  const [processedSalesData, setProcessedSalesData] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<Metrics>(INITIAL_METRICS);
+  const [salesData] = useState<SaleRow[]>(FALLBACK_SALES_DATA);
 
   useEffect(() => {
-    // Fetch AI Insights
-    fetch('http://localhost:5000/api/ai/insights')
-      .then((res) => res.json())
-      .then((data) => {
-        setInsights(data.insights || 'No insights available.');
-        setLoadingInsights(false);
-      })
-      .catch(() => {
-        setInsights('Failed to fetch insights.');
-        setLoadingInsights(false);
-      });
+    let isMounted = true;
 
-    // Fetch metrics
-    fetch('http://localhost:5000/api/metrics/summary')
-      .then((res) => res.json())
-      .then((data) => setMetrics(data))
-      .catch(() => setMetrics({ revenue: 'Error', orders: 'Error', users: 'Error' }));
+    const loadDashboardData = async () => {
+      const [insightsResult, metricsResult] = await Promise.allSettled([
+        fetchJson<{ insights: string }>('/api/ai/insights'),
+        fetchJson<Metrics>('/api/metrics/summary'),
+      ]);
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (insightsResult.status === 'fulfilled') {
+        setInsights(insightsResult.value.insights || 'No insights available.');
+      } else {
+        setInsights('Failed to fetch insights.');
+      }
+
+      if (metricsResult.status === 'fulfilled') {
+        setMetrics(metricsResult.value);
+      } else {
+        setMetrics({ revenue: 'Error', orders: 'Error', users: 'Error' });
+      }
+
+      setLoadingInsights(false);
+    };
+
+    loadDashboardData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  useEffect(() => {
-    const transformed = salesData.reduce((acc: any[], sale) => {
-      const date = sale.date;
-      const sales = parseInt(sale.amount.replace(/[^\d]/g, ''), 10);
+  const processedSalesData = useMemo<TrendDataPoint[]>(() => {
+    return salesData.reduce<TrendDataPoint[]>((acc, sale) => {
+      const sales = Number.parseInt(sale.amount.replace(/[^\d]/g, ''), 10);
       const returns = Math.floor(sales * 0.1);
       const profit = Math.floor(sales * 0.6);
 
-      const existing = acc.find((item) => item.date === date);
+      const existing = acc.find((item) => item.date === sale.date);
       if (existing) {
         existing.sales += sales;
         existing.returns += returns;
         existing.profit += profit;
       } else {
-        acc.push({ date, sales, returns, profit });
+        acc.push({ date: sale.date, sales, returns, profit });
       }
+
       return acc;
     }, []);
-    setProcessedSalesData(transformed);
   }, [salesData]);
 
   return (
@@ -95,7 +132,7 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="flex-1 px-6 py-8 space-y-12 overflow-y-auto">
-         {/* Section 2: Metrics */}
+        {/* Section 2: Metrics */}
         <section className="space-y-6">
           <h2 className="text-xl font-semibold text-white">Overview Metrics</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -124,8 +161,6 @@ export default function DashboardPage() {
             </div>
           </div>
         </section>
-
-       
 
         {/* Section 3: AI & Global */}
         <section className="space-y-6">
